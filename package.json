@@ -1,0 +1,13 @@
+{
+  "name": "enterprise-cloudflare-voice-server",
+  "version": "2.0.0",
+  "description": "Enterprise-grade real-time voice signaling and stateful room server on Cloudflare Workers",
+  "main": "index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}
