@@ -1,5 +1,5 @@
 name = "voice-enterprise-server"
-main = "src/index.js" # Ubah ke lokasi file JavaScript tempat kamu menyimpan kode di atas
+main = "index.js" # Ubah ke lokasi file JavaScript tempat kamu menyimpan kode di atas
 compatibility_date = "2024-04-03"
 
 # Durable Object Binding
