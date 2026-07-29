@@ -1,8 +1,13 @@
-name = "nama-worker-anda"
-main = "index.js" # sesuaikan dengan entry point kode Anda
-compatibility_date = "2026-07-29"
+name = "voice-enterprise-server"
+main = "src/index.js" # Ubah ke lokasi file JavaScript tempat kamu menyimpan kode di atas
+compatibility_date = "2024-04-03"
 
-# Format konfigurasi Durable Object yang benar:
+# Durable Object Binding
 [[durable_objects.bindings]]
-name = "MY_DURABLE_OBJECT"
-class_name = "DurableObjectClassName"
+name = "VOICE_ENTERPRISE_ROOM"
+class_name = "VoiceEnterpriseRoom"
+
+# Migrasi untuk Durable Objects dengan dukungan SQLite Storage
+[[migrations]]
+tag = "v1"
+new_classes = ["VoiceEnterpriseRoom"]
