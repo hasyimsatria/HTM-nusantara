@@ -1,5 +1,5 @@
-name = "voice-enterprise-server"
-main = "index.js" # Ubah ke lokasi file JavaScript tempat kamu menyimpan kode di atas
+name = "online"
+main = "index.js" # sesuaikan lokasi file JS/TS utama kamu jika berbeda
 compatibility_date = "2024-04-03"
 
 # Durable Object Binding
@@ -7,7 +7,7 @@ compatibility_date = "2024-04-03"
 name = "VOICE_ENTERPRISE_ROOM"
 class_name = "VoiceEnterpriseRoom"
 
-# Migrasi untuk Durable Objects dengan dukungan SQLite Storage
+# Migrasi SQLite khusus untuk Free Plan & DO SQLite API
 [[migrations]]
 tag = "v1"
-new_classes = ["VoiceEnterpriseRoom"]
+new_sqlite_classes = ["VoiceEnterpriseRoom"]
