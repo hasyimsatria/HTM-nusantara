@@ -1,5 +1,5 @@
 name = "online"
-main = "new_index.js" # sesuaikan lokasi file JS/TS utama kamu jika berbeda
+main = "index.js" # sesuaikan lokasi file JS/TS utama kamu jika berbeda
 compatibility_date = "2024-04-03"
 
 # Durable Object Binding
