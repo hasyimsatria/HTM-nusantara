@@ -110,16 +110,19 @@ async function signSkyWayToken(appId, secretKey) {
 
   const iat = Math.floor(Date.now() / 1000);
   const exp = iat + 3600;
-
   const jti = crypto.randomUUID();
 
   const payload = {
     jti: jti,
     iat: iat,
     exp: exp,
-    version: 3, // 👈 KUNCI UTAMA: Wajib deklarasi token versi 3
+    version: 3,
     scope: {
-      appId: appId, // 👈 Berubah: Langsung appId, bukan app: { id: ... }
+      app: {
+        id: appId,
+        turn: true,
+        actions: ["read"]
+      },
       rooms: [
         {
           name: "*",
@@ -134,7 +137,6 @@ async function signSkyWayToken(appId, secretKey) {
               actions: ["create", "read", "write", "updateMetadata", "delete"]
             }
           },
-          // 👈 PERBAIKAN: sfuBots HARUS berada di DALAM struktur rooms
           sfuBots: [
             {
               actions: ["create", "read", "write"],
@@ -152,59 +154,44 @@ async function signSkyWayToken(appId, secretKey) {
 
   const base64UrlEncode = (value) => {
     const json = JSON.stringify(value);
-
-    const bytes =
-      new TextEncoder().encode(json);
-
+    const bytes = new TextEncoder().encode(json);
     let binary = "";
-
     for (const byte of bytes) {
       binary += String.fromCharCode(byte);
     }
-
     return btoa(binary)
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=/g, "");
   };
 
-  const encodedHeader =
-    base64UrlEncode(header);
+  const encodedHeader = base64UrlEncode(header);
+  const encodedPayload = base64UrlEncode(payload);
+  const tokenData = `${encodedHeader}.${encodedPayload}`;
 
-  const encodedPayload =
-    base64UrlEncode(payload);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secretKey),
+    {
+      name: "HMAC",
+      hash: "SHA-256"
+    },
+    false,
+    ["sign"]
+  );
 
-  const tokenData =
-    `${encodedHeader}.${encodedPayload}`;
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(tokenData)
+  );
 
-  const key =
-    await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(secretKey),
-      {
-        name: "HMAC",
-        hash: "SHA-256"
-      },
-      false,
-      ["sign"]
-    );
-
-  const signature =
-    await crypto.subtle.sign(
-      "HMAC",
-      key,
-      new TextEncoder().encode(tokenData)
-    );
-
-  const encodedSignature =
-    btoa(
-      String.fromCharCode(
-        ...new Uint8Array(signature)
-      )
-    )
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=/g, "");
+  const encodedSignature = btoa(
+    String.fromCharCode(...new Uint8Array(signature))
+  )
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "");
 
   return `${tokenData}.${encodedSignature}`;
 }
