@@ -100,7 +100,7 @@ export default {
 
 
 // =============================================================
-// SKYWAY JWT HS256
+// SKYWAY JWT HS256 (Updated Payload Structure)
 // =============================================================
 async function signSkyWayToken(appId, secretKey) {
   const header = {
@@ -109,7 +109,7 @@ async function signSkyWayToken(appId, secretKey) {
   };
 
   const iat = Math.floor(Date.now() / 1000);
-  const exp = iat + 3600;
+  const exp = iat + 86400; // Diberikan waktu 24 jam agar tidak cepat expired
   const jti = crypto.randomUUID();
 
   const payload = {
@@ -126,27 +126,17 @@ async function signSkyWayToken(appId, secretKey) {
       rooms: [
         {
           name: "*",
-          methods: ["create", "read", "write", "updateMetadata", "close"],
+          methods: ["create", "read", "write", "delete", "close", "updateMetadata"],
           member: {
             name: "*",
-            methods: ["create", "read", "write", "updateMetadata", "leave"],
+            methods: ["create", "read", "write", "delete", "leave", "updateMetadata"],
             publication: {
-              actions: ["create", "read", "write", "updateMetadata", "delete"]
+              actions: ["create", "read", "write", "delete", "updateMetadata"]
             },
             subscription: {
-              actions: ["create", "read", "write", "updateMetadata", "delete"]
+              actions: ["create", "read", "write", "delete", "updateMetadata"]
             }
-          },
-          sfuBots: [
-            {
-              actions: ["create", "read", "write"],
-              forwardings: [
-                {
-                  actions: ["create", "read", "write", "updateMetadata", "delete"]
-                }
-              ]
-            }
-          ]
+          }
         }
       ]
     }
