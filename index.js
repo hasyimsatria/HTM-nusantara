@@ -119,6 +119,10 @@ async function signSkyWayToken(appId, secretKey) {
     jti,
     version: 3,
 
+    app: {
+      id: appId
+    },
+
     scope: {
       appId,
 
