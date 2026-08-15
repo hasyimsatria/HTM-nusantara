@@ -114,53 +114,35 @@ async function signSkyWayToken(appId, secretKey) {
   const jti = crypto.randomUUID();
 
   const payload = {
-    iat,
-    exp,
-    jti,
-
+    jti: jti,
+    iat: iat,
+    exp: exp,
+    version: 3, // 👈 KUNCI UTAMA: Wajib deklarasi token versi 3
     scope: {
-      app: {      
-        id: appId,
-        turn: true,         
-        actions: ["read"]   
-      },
+      appId: appId, // 👈 Berubah: Langsung appId, bukan app: { id: ... }
       rooms: [
         {
           name: "*",
-          methods: [
-            "create", 
-            "read", 
-            "write", 
-            "updateMetadata", 
-            "close"
-          ],
+          methods: ["create", "read", "write", "updateMetadata", "close"],
           member: {
             name: "*",
-            methods: [
-              "create", 
-              "read", 
-              "write", 
-              "updateMetadata", 
-              "leave"
-            ],
-            // ✅ TAMBAHAN: Izin khusus untuk mengirim media (publish)
+            methods: ["create", "read", "write", "updateMetadata", "leave"],
             publication: {
               actions: ["create", "read", "write", "updateMetadata", "delete"]
             },
-            // ✅ TAMBAHAN: Izin khusus untuk menerima media (subscribe)
             subscription: {
               actions: ["create", "read", "write", "updateMetadata", "delete"]
             }
-          }
-        }
-      ],
-      // ✅ PERBAIKAN: Tambahkan "create" pada sfuBots agar bisa membuat SFU Room
-      sfuBots: [
-        {
-          actions: ["create", "read", "write"],
-          forwardings: [
+          },
+          // 👈 PERBAIKAN: sfuBots HARUS berada di DALAM struktur rooms
+          sfuBots: [
             {
-              actions: ["create", "read", "write", "updateMetadata", "delete"]
+              actions: ["create", "read", "write"],
+              forwardings: [
+                {
+                  actions: ["create", "read", "write", "updateMetadata", "delete"]
+                }
+              ]
             }
           ]
         }
