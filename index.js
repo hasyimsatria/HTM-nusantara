@@ -124,43 +124,47 @@ async function signSkyWayToken(appId, secretKey) {
         turn: true,         
         actions: ["read"]   
       },
-
       rooms: [
         {
           name: "*",
           methods: [
-            "create",
-            "read",
-            "write",          // ✅ TAMBAHAN: Izin write untuk room
-            "updateMetadata",
+            "create", 
+            "read", 
+            "write", 
+            "updateMetadata", 
             "close"
           ],
           member: {
             name: "*",
             methods: [
-              "create",       // ✅ TAMBAHAN UTAMA: Wajib ada agar user bisa Join!
-              "read",
-              "write",        // ✅ TAMBAHAN: Izin write untuk member
-              "publish",
-              "subscribe",       
-              "updateMetadata",
+              "create", 
+              "read", 
+              "write", 
+              "updateMetadata", 
               "leave"
-            ]
+            ],
+            // ✅ TAMBAHAN: Izin khusus untuk mengirim media (publish)
+            publication: {
+              actions: ["create", "read", "write", "updateMetadata", "delete"]
+            },
+            // ✅ TAMBAHAN: Izin khusus untuk menerima media (subscribe)
+            subscription: {
+              actions: ["create", "read", "write", "updateMetadata", "delete"]
+            }
           }
         }
       ],
-
+      // ✅ PERBAIKAN: Tambahkan "create" pada sfuBots agar bisa membuat SFU Room
       sfuBots: [
         {
-          actions: ["write"],
+          actions: ["create", "read", "write"],
           forwardings: [
             {
-              actions: ["write"]
+              actions: ["create", "read", "write", "updateMetadata", "delete"]
             }
           ]
         }
       ]
-      
     }
   };
 
