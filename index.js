@@ -49,8 +49,10 @@ async function signSkyWayToken(appId, secretKey) {
   const now = Math.floor(Date.now() / 1000);
   const iat = now - 300;
   const exp = now + 3600;
+  const jti = crypto.randomUUID();
 
   const payload = {
+    jti,
     iat,
     exp,
     version: 3,
