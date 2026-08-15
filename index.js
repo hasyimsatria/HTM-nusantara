@@ -130,16 +130,19 @@ async function signSkyWayToken(appId, secretKey) {
           name: "*",
           methods: [
             "create",
-            "read",         
+            "read",
+            "write",          // ✅ TAMBAHAN: Izin write untuk room
             "updateMetadata",
             "close"
           ],
           member: {
             name: "*",
             methods: [
+              "create",       // ✅ TAMBAHAN UTAMA: Wajib ada agar user bisa Join!
+              "read",
+              "write",        // ✅ TAMBAHAN: Izin write untuk member
               "publish",
-              "subscribe",
-              "read",       
+              "subscribe",       
               "updateMetadata",
               "leave"
             ]
