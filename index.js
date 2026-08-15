@@ -117,30 +117,28 @@ async function signSkyWayToken(appId, secretKey) {
     iat,
     exp,
     jti,
-    version: 3,
-
-    app: {
-      id: appId
-    },
 
     scope: {
-      appId,
+      app: {      // ✅ BENAR: app berada di DALAM scope
+        id: appId,
+        turn: true,         // Wajib untuk koneksi jaringan yang kompleks
+        actions: ["read"]   // Wajib memiliki izin 'read'
+      },
 
       rooms: [
         {
           name: "*",
-
           methods: [
             "create",
+            "read",         // Tambahkan 'read'
             "updateMetadata"
           ],
-
           member: {
             name: "*",
-
             methods: [
               "publish",
               "subscribe",
+              "read",       // Tambahkan 'read'
               "updateMetadata"
             ]
           }
