@@ -119,10 +119,10 @@ async function signSkyWayToken(appId, secretKey) {
     jti,
 
     scope: {
-      app: {      // ✅ BENAR: app berada di DALAM scope
+      app: {      
         id: appId,
-        turn: true,         // Wajib untuk koneksi jaringan yang kompleks
-        actions: ["read"]   // Wajib memiliki izin 'read'
+        turn: true,         
+        actions: ["read"]   
       },
 
       rooms: [
@@ -130,20 +130,34 @@ async function signSkyWayToken(appId, secretKey) {
           name: "*",
           methods: [
             "create",
-            "read",         // Tambahkan 'read'
-            "updateMetadata"
+            "read",         
+            "updateMetadata",
+            "close"
           ],
           member: {
             name: "*",
             methods: [
               "publish",
               "subscribe",
-              "read",       // Tambahkan 'read'
-              "updateMetadata"
+              "read",       
+              "updateMetadata",
+              "leave"
             ]
           }
         }
+      ],
+
+      sfuBots: [
+        {
+          actions: ["write"],
+          forwardings: [
+            {
+              actions: ["write"]
+            }
+          ]
+        }
       ]
+      
     }
   };
 
