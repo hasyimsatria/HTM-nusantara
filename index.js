@@ -100,7 +100,7 @@ export default {
 
 
 // =============================================================
-// SKYWAY JWT HS256 (Updated Payload Structure)
+// SKYWAY JWT HS256
 // =============================================================
 async function signSkyWayToken(appId, secretKey) {
   const header = {
@@ -109,79 +109,113 @@ async function signSkyWayToken(appId, secretKey) {
   };
 
   const iat = Math.floor(Date.now() / 1000);
-  const exp = iat + 86400; // Diberikan waktu 24 jam agar tidak cepat expired
+  const exp = iat + 3600;
+
   const jti = crypto.randomUUID();
 
   const payload = {
-    jti: jti,
-    iat: iat,
-    exp: exp,
-    version: 3,
+    iat,
+    exp,
+    jti,
+
     scope: {
-      app: {
+      app: {      
         id: appId,
-        turn: true,
-        actions: ["read"]
+        turn: true,         
+        actions: ["read"]   
       },
+
       rooms: [
         {
           name: "*",
-          methods: ["create", "read", "write", "delete", "close", "updateMetadata"],
+          methods: [
+            "create",
+            "read",         
+            "updateMetadata",
+            "close"
+          ],
           member: {
             name: "*",
-            methods: ["create", "read", "write", "delete", "leave", "updateMetadata"],
-            publication: {
-              actions: ["create", "read", "write", "delete", "updateMetadata"]
-            },
-            subscription: {
-              actions: ["create", "read", "write", "delete", "updateMetadata"]
-            }
+            methods: [
+              "publish",
+              "subscribe",
+              "read",       
+              "updateMetadata",
+              "leave"
+            ]
           }
         }
+      ],
+
+      sfuBots: [
+        {
+          actions: ["write"],
+          forwardings: [
+            {
+              actions: ["write"]
+            }
+          ]
+        }
       ]
+      
     }
   };
 
   const base64UrlEncode = (value) => {
     const json = JSON.stringify(value);
-    const bytes = new TextEncoder().encode(json);
+
+    const bytes =
+      new TextEncoder().encode(json);
+
     let binary = "";
+
     for (const byte of bytes) {
       binary += String.fromCharCode(byte);
     }
+
     return btoa(binary)
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=/g, "");
   };
 
-  const encodedHeader = base64UrlEncode(header);
-  const encodedPayload = base64UrlEncode(payload);
-  const tokenData = `${encodedHeader}.${encodedPayload}`;
+  const encodedHeader =
+    base64UrlEncode(header);
 
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secretKey),
-    {
-      name: "HMAC",
-      hash: "SHA-256"
-    },
-    false,
-    ["sign"]
-  );
+  const encodedPayload =
+    base64UrlEncode(payload);
 
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(tokenData)
-  );
+  const tokenData =
+    `${encodedHeader}.${encodedPayload}`;
 
-  const encodedSignature = btoa(
-    String.fromCharCode(...new Uint8Array(signature))
-  )
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=/g, "");
+  const key =
+    await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secretKey),
+      {
+        name: "HMAC",
+        hash: "SHA-256"
+      },
+      false,
+      ["sign"]
+    );
+
+  const signature =
+    await crypto.subtle.sign(
+      "HMAC",
+      key,
+      new TextEncoder().encode(tokenData)
+    );
+
+  const encodedSignature =
+    btoa(
+      String.fromCharCode(
+        ...new Uint8Array(signature)
+      )
+    )
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
 
   return `${tokenData}.${encodedSignature}`;
 }
