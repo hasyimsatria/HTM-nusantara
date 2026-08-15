@@ -119,8 +119,12 @@ async function signSkyWayToken(appId, secretKey) {
     version: 3, // DITAMBAHKAN: Wajib untuk SkyWay SDK 2.x
 
     scope: {
-      appId: appId, // DISESUAIKAN: Langsung di bawah scope untuk v2
-
+      appId: appId,
+      app: {
+        id: appId,
+        turn: true,
+        actions: ["read"]
+      },
       rooms: [
         {
           name: "*",
