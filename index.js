@@ -6,23 +6,28 @@ export default {
     const path = url.pathname;
 
     // =========================================================
-    // 1. SKYWAY TOKEN (FIXED SIGNATURE & SCOPE)
+    // 1. SKYWAY TOKEN (FIXED FOR V3)
     // =========================================================
     if (path === "/skyway/token" || path === "/skyway/token/") {
       try {
-        const appId = env.SKYWAY_APP_ID?.trim();
-        const secretKey = env.SKYWAY_SECRET_KEY?.trim();
-        // SANGAT PENTING: Ambil Secret Key ID dari dashboard SkyWay
-        const secretKeyId = env.SKYWAY_SECRET_KEY_ID?.trim();
+        const appId = env.SKYWAY_APP_ID || "b46c7eb1-d845-4d63-98bc-6802f04d09bd";
+        const secretKey = env.SKYWAY_SECRET_KEY || "1GgKiqvIVU0YYQl7xsoTI2vgQPTBDoyI3IkptLTKGpc=";
 
         if (!appId || !secretKey) {
-          return json({ error: "Environment variables SKYWAY_APP_ID or SKYWAY_SECRET_KEY are missing" }, 500);
+          return new Response(JSON.stringify({ error: "Config Missing" }), { status: 500 });
         }
 
-        const token = await signSkyWayToken(appId, secretKey, secretKeyId);
-        return json({ token });
+        const token = await signSkyWayToken(appId.trim(), secretKey.trim());
+
+        return new Response(JSON.stringify({ token }), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+          }
+        });
       } catch (e) {
-        return json({ error: "JWT Generation Failed", details: e.message }, 500);
+        return new Response(JSON.stringify({ error: "JWT Error", details: e.message }), { status: 500 });
       }
     }
 
@@ -36,40 +41,35 @@ export default {
 
     const objectId = env.VOICE_ENTERPRISE_ROOM.idFromName(roomId);
     const roomStub = env.VOICE_ENTERPRISE_ROOM.get(objectId);
+
     return roomStub.fetch(request);
   }
 };
 
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
-  });
-}
-
 // =============================================================
-// SKYWAY JWT SIGNER (PROPER BASE64 DECODING)
+// SKYWAY JWT HS256 SIGNER
 // =============================================================
-async function signSkyWayToken(appId, secretKey, secretKeyId) {
+async function signSkyWayToken(appId, secretKey) {
   const now = Math.floor(Date.now() / 1000);
-  const iat = now - 120; // Gunakan buffer 2 menit untuk toleransi jam HP yang tidak akurat
+  const iat = now - 120; // Buffer 2 menit untuk sinkronisasi waktu
   const exp = now + 3600; // Berlaku 1 jam
 
   const header = {
     alg: "HS256",
-    typ: "JWT",
-    kid: secretKeyId || appId // Jika Secret Key ID tidak ada, gunakan App ID (Meski disarankan sk-...)
+    typ: "JWT"
   };
 
   const payload = {
     iat,
     exp,
     jti: crypto.randomUUID(),
-    sub: appId,
-    version: 3,
+    version: 3, // Wajib untuk SkyWay v3
     scope: {
-      appId: appId,
-      app: { id: appId, actions: ["read"] },
+      appId: appId, // Wajib di root scope
+      app: {
+        id: appId,
+        actions: ["read"]
+      },
       rooms: [
         {
           id: "*",
@@ -88,19 +88,18 @@ async function signSkyWayToken(appId, secretKey, secretKeyId) {
     }
   };
 
-  const base64UrlEncode = (v) => {
-    const bin = String.fromCharCode(...new TextEncoder().encode(JSON.stringify(v)));
+  const base64UrlEncode = (obj) => {
+    const bin = String.fromCharCode(...new TextEncoder().encode(JSON.stringify(obj)));
     return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
   };
 
   const tokenData = `${base64UrlEncode(header)}.${base64UrlEncode(payload)}`;
 
   // --- PERBAIKAN KRITIS: Decode Secret Key dari Base64 ke Raw Bytes ---
-  // Jangan gunakan TextEncoder().encode(secretKey)
   const normalizedSecret = secretKey.replace(/-/g, "+").replace(/_/g, "/");
   const keyBytes = Uint8Array.from(atob(normalizedSecret), c => c.charCodeAt(0));
 
-  const cryptoKey = await crypto.subtle.importKey(
+  const key = await crypto.subtle.importKey(
     "raw",
     keyBytes,
     { name: "HMAC", hash: "SHA-256" },
@@ -108,11 +107,7 @@ async function signSkyWayToken(appId, secretKey, secretKeyId) {
     ["sign"]
   );
 
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    cryptoKey,
-    new TextEncoder().encode(tokenData)
-  );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(tokenData));
 
   const encodedSignature = btoa(String.fromCharCode(...new Uint8Array(signature)))
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
@@ -126,7 +121,6 @@ async function signSkyWayToken(appId, secretKey, secretKeyId) {
 export class VoiceEnterpriseRoom extends DurableObject {
   constructor(ctx, env) { super(ctx, env); this.env = env; }
   async fetch(request) {
-    if (request.headers.get("Upgrade") !== "websocket") return new Response("Upgrade Required", { status: 426 });
     const url = new URL(request.url);
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
