@@ -9,46 +9,46 @@ export default {
     const path = url.pathname;
 
 
+    // Health check
     if (path === "/") {
-      return new Response("HTM Worker Online");
+      return new Response("HTM Worker Online", {
+        status: 200
+      });
     }
 
 
+    // Room websocket endpoint
     const roomMatch = path.match(/^\/room\/([^\/]+)$/);
-
 
     if (!roomMatch) {
       return new Response("Not Found", {
-        status:404
+        status: 404
       });
     }
 
 
+    // Pastikan websocket
     if (
-      request.headers.get("Upgrade")?.toLowerCase()
-      !== "websocket"
+      request.headers.get("Upgrade")?.toLowerCase() !== "websocket"
     ) {
-
       return new Response("Expected WebSocket", {
-        status:426
+        status: 426
       });
-
     }
 
 
-
-    const roomId = roomMatch[1];
+    const roomId = decodeURIComponent(roomMatch[1]);
 
 
     const id =
       env.VOICE_ENTERPRISE_ROOM.idFromName(roomId);
 
 
-    const stub =
+    const room =
       env.VOICE_ENTERPRISE_ROOM.get(id);
 
 
-    return stub.fetch(request);
+    return room.fetch(request);
 
   }
 
@@ -59,30 +59,17 @@ export default {
 export class VoiceEnterpriseRoom extends DurableObject {
 
 
-  constructor(ctx,env){
+  constructor(ctx, env) {
 
-    super(ctx,env);
+    super(ctx, env);
 
   }
 
 
 
-  async fetch(request){
+  async fetch(request) {
 
-
-    const url =
-      new URL(request.url);
-
-
-
-    const pair =
-      new WebSocketPair();
-
-
-
-    const [client,server] =
-      Object.values(pair);
-
+    const url = new URL(request.url);
 
 
     const peerId =
@@ -90,11 +77,9 @@ export class VoiceEnterpriseRoom extends DurableObject {
       || crypto.randomUUID();
 
 
-
     const name =
       url.searchParams.get("name")
       || "USER";
-
 
 
     const loc =
@@ -103,10 +88,10 @@ export class VoiceEnterpriseRoom extends DurableObject {
 
 
 
-    // Agora UID
-    const uid =
-      url.searchParams.get("uid")
-      || "";
+    const pair = new WebSocketPair();
+
+    const client = pair[0];
+    const server = pair[1];
 
 
 
@@ -118,14 +103,49 @@ export class VoiceEnterpriseRoom extends DurableObject {
 
       peerId,
       name,
-      loc,
-      uid
+      loc
 
     });
 
 
 
-    // Beritahu user lama ada user baru
+    // Kirim daftar user lama
+    const existingPeers =
+      this.ctx
+      .getWebSockets()
+      .filter(ws => ws !== server)
+      .map(ws => {
+
+        const data =
+          ws.deserializeAttachment();
+
+        return data
+          ? {
+              peerId:data.peerId,
+              name:data.name,
+              loc:data.loc
+            }
+          : null;
+
+      })
+      .filter(Boolean);
+
+
+
+    server.send(JSON.stringify({
+
+      type:"WELCOME",
+
+      peerId,
+
+      peers:existingPeers
+
+    }));
+
+
+
+
+    // Beritahu user lain
     this.broadcast({
 
       type:"PEER_JOINED",
@@ -134,47 +154,20 @@ export class VoiceEnterpriseRoom extends DurableObject {
 
       name,
 
-      loc,
+      loc
 
-      uid
-
-    },server);
+    }, server);
 
 
 
 
-    // Ambil semua peer aktif lengkap
-    const peers =
-      this.ctx
-      .getWebSockets()
-      .filter(s=>s!==server)
-      .map(s=>s.deserializeAttachment())
-      .filter(Boolean);
-
-
-
-    // Kirim daftar peer lengkap
-    server.send(JSON.stringify({
-
-      type:"WELCOME",
-
-      peerId,
-
-      peers
-
-    }));
-
-
-
-
-    return new Response(null,{
+    return new Response(null, {
 
       status:101,
 
       webSocket:client
 
     });
-
 
   }
 
@@ -183,11 +176,10 @@ export class VoiceEnterpriseRoom extends DurableObject {
 
 
 
+  async webSocketMessage(ws,message) {
 
-  async webSocketMessage(ws,message){
 
-
-    try{
+    try {
 
 
       const data =
@@ -195,13 +187,18 @@ export class VoiceEnterpriseRoom extends DurableObject {
 
 
 
-      const att =
+      const sender =
         ws.deserializeAttachment();
 
 
 
-      if(data.type==="PING"){
+      if (!sender) return;
 
+
+
+
+      // heartbeat
+      if(data.type === "PING") {
 
         ws.send(JSON.stringify({
 
@@ -221,13 +218,11 @@ export class VoiceEnterpriseRoom extends DurableObject {
 
         ...data,
 
-        sender:att.peerId,
+        sender: sender.peerId,
 
-        name:att.name,
+        name: sender.name,
 
-        loc:att.loc,
-
-        uid:att.uid
+        loc: sender.loc
 
       };
 
@@ -236,28 +231,34 @@ export class VoiceEnterpriseRoom extends DurableObject {
 
 
 
-      // private message
-
-      if(data.target){
+      // pesan private
+      if(data.target) {
 
 
         for(
-          const socket of this.ctx.getWebSockets()
-        ){
+          const client of this.ctx.getWebSockets()
+        ) {
 
 
           const target =
-            socket.deserializeAttachment();
+            client.deserializeAttachment();
 
 
 
           if(
-            target?.peerId === data.target
-          ){
+            target &&
+            target.peerId === data.target
+          ) {
 
-            socket.send(
-              JSON.stringify(payload)
-            );
+
+            try {
+
+              client.send(
+                JSON.stringify(payload)
+              );
+
+            } catch(e){}
+
 
           }
 
@@ -265,20 +266,30 @@ export class VoiceEnterpriseRoom extends DurableObject {
         }
 
 
-
-      }else{
-
-
-        this.broadcast(payload,ws);
-
+        return;
 
       }
 
 
 
-    }catch(e){
 
-      console.log("WS ERROR",e.message);
+
+
+
+      // broadcast room
+      this.broadcast(payload, ws);
+
+
+
+
+    } catch(error) {
+
+
+      console.log(
+        "WebSocket Message Error",
+        error
+      );
+
 
     }
 
@@ -292,28 +303,26 @@ export class VoiceEnterpriseRoom extends DurableObject {
 
 
 
-  async webSocketClose(ws){
+  async webSocketClose(ws) {
 
 
-
-    const att =
+    const data =
       ws.deserializeAttachment();
 
 
 
-    if(att){
+    if(!data) return;
 
 
-      this.broadcast({
-
-        type:"PEER_LEFT",
-
-        peerId:att.peerId
-
-      });
 
 
-    }
+    this.broadcast({
+
+      type:"PEER_LEFT",
+
+      peerId:data.peerId
+
+    }, ws);
 
 
 
@@ -326,37 +335,55 @@ export class VoiceEnterpriseRoom extends DurableObject {
 
 
 
-  broadcast(msg,exclude){
+  async webSocketError(ws,error) {
+
+
+    console.log(
+      "WebSocket Error",
+      error
+    );
+
+
+  }
+
+
+
+
+
+
+
+
+  broadcast(message,exclude=null) {
 
 
     const raw =
-      JSON.stringify(msg);
+      JSON.stringify(message);
 
 
 
     for(
       const ws of this.ctx.getWebSockets()
-    ){
+    ) {
 
 
-      if(ws!==exclude){
+      if(ws === exclude)
+        continue;
 
 
-        try{
 
-          ws.send(raw);
+      try {
 
-        }catch(e){}
-
+        ws.send(raw);
 
       }
+
+      catch(e){}
 
 
     }
 
 
   }
-
 
 
 }
