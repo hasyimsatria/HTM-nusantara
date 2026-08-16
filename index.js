@@ -5,29 +5,23 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // =========================================================
-    // 1. SKYWAY TOKEN (FIXED FOR V3)
-    // =========================================================
     if (path === "/skyway/token" || path === "/skyway/token/") {
       try {
-        const appId = env.SKYWAY_APP_ID || "b46c7eb1-d845-4d63-98bc-6802f04d09bd";
-        const secretKey = env.SKYWAY_SECRET_KEY || "1GgKiqvIVU0YYQl7xsoTI2vgQPTBDoyI3IkptLTKGpc=";
+        // Ambil dari Environment Variable atau gunakan langsung yang Anda berikan
+        const appId = (env.SKYWAY_APP_ID || "b46c7eb1-d845-4d63-98bc-6802f04d09bd").trim();
+        const secretKey = (env.SKYWAY_SECRET_KEY || "1GgKiqvIVU0YYQl7xsoTI2vgQPTBDoyI3IkptLTKGpc=").trim();
+        
+        // Gunakan Application ID sebagai 'kid' jika variabel ID khusus tidak ada
+        const kid = (env.SKYWAY_SECRET_KEY_ID || appId).trim();
 
-        if (!appId || !secretKey) {
-          return new Response(JSON.stringify({ error: "Config Missing" }), { status: 500 });
-        }
-
-        const token = await signSkyWayToken(appId.trim(), secretKey.trim());
+        const token = await signSkyWayToken(appId, secretKey, kid);
 
         return new Response(JSON.stringify({ token }), {
           status: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-          }
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
         });
       } catch (e) {
-        return new Response(JSON.stringify({ error: "JWT Error", details: e.message }), { status: 500 });
+        return new Response(JSON.stringify({ error: "Token Error", details: e.message }), { status: 500 });
       }
     }
 
@@ -37,39 +31,32 @@ export default {
     if (!roomMatch) return new Response("Not Found", { status: 404 });
 
     const roomId = roomMatch[1];
-    if (!env.VOICE_ENTERPRISE_ROOM) return new Response("Durable Object Binding Missing", { status: 500 });
+    if (!env.VOICE_ENTERPRISE_ROOM) return new Response("Durable Object Missing", { status: 500 });
 
     const objectId = env.VOICE_ENTERPRISE_ROOM.idFromName(roomId);
     const roomStub = env.VOICE_ENTERPRISE_ROOM.get(objectId);
-
     return roomStub.fetch(request);
   }
 };
 
-// =============================================================
-// SKYWAY JWT HS256 SIGNER
-// =============================================================
-async function signSkyWayToken(appId, secretKey) {
+async function signSkyWayToken(appId, secretKey, kid) {
   const now = Math.floor(Date.now() / 1000);
-  const iat = now - 120; // Buffer 2 menit untuk sinkronisasi waktu
-  const exp = now + 3600; // Berlaku 1 jam
+  const iat = now - 60; // 60 detik buffer
+  const exp = now + 3600; // 1 jam durasi
 
   const header = {
     alg: "HS256",
-    typ: "JWT"
+    typ: "JWT",
+    kid: kid // Key ID untuk identifikasi kunci
   };
 
   const payload = {
-    iat,
-    exp,
     jti: crypto.randomUUID(),
-    version: 3, // Wajib untuk SkyWay v3
+    iat: iat,
+    exp: exp,
     scope: {
-      appId: appId, // Wajib di root scope
-      app: {
-        id: appId,
-        actions: ["read"]
-      },
+      appId: appId,
+      app: { id: appId, turn: true, actions: ["read"] },
       rooms: [
         {
           id: "*",
@@ -89,35 +76,33 @@ async function signSkyWayToken(appId, secretKey) {
   };
 
   const base64UrlEncode = (obj) => {
-    const bin = String.fromCharCode(...new TextEncoder().encode(JSON.stringify(obj)));
+    const str = JSON.stringify(obj);
+    const bytes = new TextEncoder().encode(str);
+    const bin = String.fromCharCode(...bytes);
     return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
   };
 
   const tokenData = `${base64UrlEncode(header)}.${base64UrlEncode(payload)}`;
 
-  // --- PERBAIKAN KRITIS: Decode Secret Key dari Base64 ke Raw Bytes ---
+  // DECODE SECRET KEY DARI BASE64 (Sangat Penting)
   const normalizedSecret = secretKey.replace(/-/g, "+").replace(/_/g, "/");
-  const keyBytes = Uint8Array.from(atob(normalizedSecret), c => c.charCodeAt(0));
+  const keyBuffer = Uint8Array.from(atob(normalizedSecret), c => c.charCodeAt(0));
 
   const key = await crypto.subtle.importKey(
     "raw",
-    keyBytes,
+    keyBuffer,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
   );
 
   const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(tokenData));
-
   const encodedSignature = btoa(String.fromCharCode(...new Uint8Array(signature)))
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 
   return `${tokenData}.${encodedSignature}`;
 }
 
-// =============================================================
-// DURABLE OBJECT (TETAP SAMA)
-// =============================================================
 export class VoiceEnterpriseRoom extends DurableObject {
   constructor(ctx, env) { super(ctx, env); this.env = env; }
   async fetch(request) {
