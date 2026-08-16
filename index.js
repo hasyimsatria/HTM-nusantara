@@ -1,24 +1,16 @@
 import { DurableObject } from "cloudflare:workers";
 
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
 
-
-    // Health Check
+    // Health
     if (path === "/") {
-      return new Response("HTM Worker Online", {
-        status: 200
-      });
+      return new Response("HTM Worker Online");
     }
 
-
-    // =========================
-    // WEBSOCKET ROOM ROUTING
-    // =========================
-
+    // Room WebSocket
     const roomMatch = path.match(/^\/room\/([^\/]+)$/);
 
     if (!roomMatch) {
@@ -27,11 +19,9 @@ export default {
       });
     }
 
-
-    // Pastikan WebSocket
-    const upgrade = request.headers.get("Upgrade");
-
-    if (!upgrade || upgrade.toLowerCase() !== "websocket") {
+    if (
+      request.headers.get("Upgrade")?.toLowerCase() !== "websocket"
+    ) {
       return new Response("Expected WebSocket", {
         status: 426
       });
@@ -40,23 +30,13 @@ export default {
 
     const roomId = roomMatch[1];
 
-
-    if (!env.VOICE_ENTERPRISE_ROOM) {
-      return new Response("Durable Object Missing", {
-        status: 500
-      });
-    }
-
-
     const id = env.VOICE_ENTERPRISE_ROOM.idFromName(roomId);
 
-    const room = env.VOICE_ENTERPRISE_ROOM.get(id);
+    const stub = env.VOICE_ENTERPRISE_ROOM.get(id);
 
-
-    return room.fetch(request);
+    return stub.fetch(request);
   }
 };
-
 
 
 export class VoiceEnterpriseRoom extends DurableObject {
@@ -70,34 +50,24 @@ export class VoiceEnterpriseRoom extends DurableObject {
 
     const url = new URL(request.url);
 
-
-    const upgrade = request.headers.get("Upgrade");
-
-    if (!upgrade || upgrade.toLowerCase() !== "websocket") {
-      return new Response("Expected WebSocket", {
-        status: 426
-      });
-    }
-
-
     const pair = new WebSocketPair();
 
     const [client, server] = Object.values(pair);
 
 
     const peerId =
-      url.searchParams.get("peer_id") ||
-      crypto.randomUUID();
+      url.searchParams.get("peer_id")
+      || crypto.randomUUID();
 
 
     const name =
-      url.searchParams.get("name") ||
-      "USER";
+      url.searchParams.get("name")
+      || "USER";
 
 
     const loc =
-      url.searchParams.get("loc") ||
-      "";
+      url.searchParams.get("loc")
+      || "";
 
 
     this.ctx.acceptWebSocket(server);
@@ -110,10 +80,9 @@ export class VoiceEnterpriseRoom extends DurableObject {
     });
 
 
-    // Broadcast user masuk
     this.broadcast(
       {
-        type: "PEER_JOINED",
+        type:"PEER_JOINED",
         peerId,
         name,
         loc
@@ -122,104 +91,99 @@ export class VoiceEnterpriseRoom extends DurableObject {
     );
 
 
-    const existing =
+    const peers =
       this.ctx
-        .getWebSockets()
-        .filter(ws => ws !== server)
-        .map(ws => ws.deserializeAttachment()?.peerId)
-        .filter(Boolean);
-
+      .getWebSockets()
+      .filter(s=>s!==server)
+      .map(s=>s.deserializeAttachment()?.peerId)
+      .filter(Boolean);
 
 
     server.send(JSON.stringify({
-      type: "WELCOME",
+      type:"WELCOME",
       peerId,
-      peers: existing
+      peers
     }));
 
 
-    return new Response(null, {
-      status: 101,
-      webSocket: client
+    return new Response(null,{
+      status:101,
+      webSocket:client
     });
   }
 
 
 
-  async webSocketMessage(ws, message) {
+  async webSocketMessage(ws,message){
 
-    try {
+    try{
 
       const data = JSON.parse(message);
 
-      const att = ws.deserializeAttachment();
+
+      const att =
+      ws.deserializeAttachment();
 
 
-      // heartbeat
-      if (data.type === "PING") {
+      if(data.type==="PING"){
 
         ws.send(JSON.stringify({
-          type: "PONG"
+          type:"PONG"
         }));
 
         return;
       }
 
 
-
-      const payload = {
+      const payload={
         ...data,
-        sender: att.peerId,
-        name: att.name,
-        loc: att.loc
+        sender:att.peerId,
+        name:att.name,
+        loc:att.loc
       };
 
 
+      if(data.target){
 
-      // private message
-      if (data.target) {
+        for(
+          const s of this.ctx.getWebSockets()
+        ){
 
-        this.ctx
-          .getWebSockets()
-          .forEach(socket => {
+          const a=s.deserializeAttachment();
 
-            const target =
-              socket.deserializeAttachment()?.peerId;
+          if(a?.peerId===data.target){
 
+            s.send(JSON.stringify(payload));
 
-            if (target === data.target) {
-              socket.send(JSON.stringify(payload));
-            }
+          }
 
-          });
+        }
 
+      }else{
 
-      } else {
-
-        this.broadcast(payload, ws);
+        this.broadcast(payload,ws);
 
       }
 
 
-    } catch (e) {
-
-    }
+    }catch(e){}
 
   }
 
 
 
 
-  async webSocketClose(ws) {
+  async webSocketClose(ws){
 
-    const att = ws.deserializeAttachment();
+    const att =
+    ws.deserializeAttachment();
 
 
-    if (att) {
+    if(att){
 
       this.broadcast({
-        type: "PEER_LEFT",
-        peerId: att.peerId
+        type:"PEER_LEFT",
+        peerId:att.peerId
       });
 
     }
@@ -229,24 +193,25 @@ export class VoiceEnterpriseRoom extends DurableObject {
 
 
 
-  broadcast(message, exclude) {
+  broadcast(msg,exclude){
 
-    const data = JSON.stringify(message);
+    const raw=JSON.stringify(msg);
 
 
-    this.ctx
-      .getWebSockets()
-      .forEach(ws => {
+    for(
+      const ws of this.ctx.getWebSockets()
+    ){
 
-        if (ws !== exclude) {
+      if(ws!==exclude){
 
-          try {
-            ws.send(data);
-          } catch(e) {}
-
+        try{
+          ws.send(raw);
         }
+        catch(e){}
 
-      });
+      }
+
+    }
 
   }
 
